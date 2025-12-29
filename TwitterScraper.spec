@@ -13,6 +13,7 @@ No auto-detection. No hooks. Just deterministic bundling.
 
 import os
 import sys
+from PyInstaller.utils.hooks import collect_all, collect_submodules
 
 # =============================================================================
 # EXPLICIT TCL/TK PATHS (CRITICAL - DO NOT MODIFY)
@@ -77,6 +78,54 @@ except ImportError:
     print("[WARNING] certifi not installed")
 
 print(f"[SPEC] Total data entries: {len(datas)}")
+
+# =============================================================================
+# COLLECT TKINTER BINARIES AND DLLS
+# =============================================================================
+# This is critical - we need the _tkinter.pyd and Tcl/Tk DLLs
+binaries = []
+
+# Find and add Tcl/Tk DLLs from Python installation
+python_dir = sys.prefix
+dll_dirs = [
+    os.path.join(python_dir, 'DLLs'),
+    os.path.join(python_dir, 'Library', 'bin'),
+    python_dir,
+]
+
+for dll_dir in dll_dirs:
+    if os.path.isdir(dll_dir):
+        for f in os.listdir(dll_dir):
+            fl = f.lower()
+            # Include Tcl/Tk DLLs and _tkinter
+            if fl.startswith(('tcl8', 'tk8', 'tcl9', 'tk9')) and fl.endswith('.dll'):
+                src = os.path.join(dll_dir, f)
+                binaries.append((src, '.'))
+                print(f"[SPEC] Found DLL: {f}")
+            elif fl == '_tkinter.pyd':
+                src = os.path.join(dll_dir, f)
+                binaries.append((src, '.'))
+                print(f"[SPEC] Found _tkinter: {f}")
+
+# Collect tkinter package data
+try:
+    tk_datas, tk_binaries, tk_hiddenimports = collect_all('tkinter')
+    datas += tk_datas
+    binaries += tk_binaries
+    print(f"[SPEC] Collected tkinter: {len(tk_datas)} data, {len(tk_binaries)} binaries")
+except Exception as e:
+    print(f"[WARNING] Could not collect tkinter: {e}")
+
+# Collect customtkinter package
+try:
+    ctk_datas, ctk_binaries, ctk_hiddenimports = collect_all('customtkinter')
+    datas += ctk_datas
+    binaries += ctk_binaries
+    print(f"[SPEC] Collected customtkinter: {len(ctk_datas)} data, {len(ctk_binaries)} binaries")
+except Exception as e:
+    print(f"[WARNING] Could not collect customtkinter: {e}")
+
+print(f"[SPEC] Total binaries: {len(binaries)}")
 
 # =============================================================================
 # HIDDEN IMPORTS
@@ -149,7 +198,7 @@ print(f"[SPEC] Hidden imports: {len(hiddenimports)}")
 a = Analysis(
     ['panel.py'],
     pathex=[],
-    binaries=[],
+    binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,
     hookspath=[],          # No custom hooks - we handle everything explicitly
