@@ -40,6 +40,7 @@ if "%CLEAN_MODE%"=="1" (
     if exist build rmdir /s /q build
     if exist dist rmdir /s /q dist
     if exist .build_venv rmdir /s /q .build_venv
+    if exist pyi_rth_tkpath.py del /f pyi_rth_tkpath.py
 )
 
 REM Create virtual environment
@@ -67,20 +68,21 @@ echo [INFO] Building executable...
 if "%DEBUG_MODE%"=="1" (
     echo [DEBUG] Building with console window enabled...
     pyinstaller --clean --noconfirm --onefile --name "TwitterScraper" --console ^
+        --collect-all customtkinter ^
+        --collect-all tkinter ^
         --hidden-import tkinter ^
         --hidden-import tkinter.ttk ^
         --hidden-import tkinter.filedialog ^
         --hidden-import _tkinter ^
-        --hidden-import customtkinter ^
+        --hidden-import PIL._tkinter_finder ^
         --hidden-import yt_dlp ^
         --hidden-import ijson ^
-        --hidden-import ijson.backends.python ^
-        --hidden-import PIL ^
-        --hidden-import PIL._tkinter_finder ^
         --hidden-import reportlab ^
         --hidden-import selenium ^
         --hidden-import undetected_chromedriver ^
-        --collect-all customtkinter ^
+        --hidden-import websockets ^
+        --hidden-import requests ^
+        --hidden-import certifi ^
         panel.py
 ) else (
     pyinstaller --clean --noconfirm TwitterScraper.spec

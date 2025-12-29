@@ -41,6 +41,7 @@ if ($Clean) {
     if (Test-Path "build") { Remove-Item -Recurse -Force "build" }
     if (Test-Path "dist") { Remove-Item -Recurse -Force "dist" }
     if (Test-Path ".build_venv") { Remove-Item -Recurse -Force ".build_venv" }
+    if (Test-Path "pyi_rth_tkpath.py") { Remove-Item -Force "pyi_rth_tkpath.py" }
 }
 
 # Create virtual environment for build
@@ -73,40 +74,25 @@ Write-Host "[INFO] Building executable..." -ForegroundColor Yellow
 if ($Debug) {
     Write-Host "[DEBUG] Building with console window enabled for debugging..." -ForegroundColor Magenta
     
-    # Get Tcl/Tk paths from Python
-    $tclPath = python -c "import tkinter; root = tkinter.Tk(); print(root.tk.exprstring('`$tcl_library')); root.destroy()" 2>$null
-    $tkPath = python -c "import tkinter; root = tkinter.Tk(); print(root.tk.exprstring('`$tk_library')); root.destroy()" 2>$null
-    
-    $addDataArgs = @()
-    if ($tclPath -and (Test-Path $tclPath)) {
-        $addDataArgs += "--add-data"
-        $addDataArgs += "$tclPath;_tcl_data"
-        Write-Host "[INFO] Found Tcl at: $tclPath" -ForegroundColor Cyan
-    }
-    if ($tkPath -and (Test-Path $tkPath)) {
-        $addDataArgs += "--add-data"
-        $addDataArgs += "$tkPath;_tk_data"
-        Write-Host "[INFO] Found Tk at: $tkPath" -ForegroundColor Cyan
-    }
-    
+    # For debug, build with console and all imports
     pyinstaller --clean --noconfirm `
         --onefile `
         --name "TwitterScraper" `
         --collect-all customtkinter `
+        --collect-all tkinter `
         --hidden-import tkinter `
         --hidden-import tkinter.ttk `
         --hidden-import tkinter.filedialog `
         --hidden-import _tkinter `
-        --hidden-import customtkinter `
+        --hidden-import PIL._tkinter_finder `
         --hidden-import yt_dlp `
         --hidden-import ijson `
-        --hidden-import ijson.backends.python `
-        --hidden-import PIL `
-        --hidden-import PIL._tkinter_finder `
         --hidden-import reportlab `
         --hidden-import selenium `
         --hidden-import undetected_chromedriver `
-        @addDataArgs `
+        --hidden-import websockets `
+        --hidden-import requests `
+        --hidden-import certifi `
         --console `
         panel.py
 } else {
