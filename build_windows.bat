@@ -79,44 +79,51 @@ echo [INFO] Dependencies installed successfully.
 echo.
 
 REM Build exe
-if "%ONEFILE_MODE%"=="1" (
-    echo [INFO] Building ONEFILE executable (release mode)...
-    pyinstaller --clean --noconfirm TwitterScraper_onefile.spec
-    
-    if exist dist\TwitterScraper.exe (
-        echo.
-        echo ========================================
-        echo   BUILD SUCCESSFUL! (ONEFILE)
-        echo ========================================
-        echo.
-        echo Executable: dist\TwitterScraper.exe
-        echo.
-        echo This is the release build - single file, no console.
-    ) else (
-        echo [ERROR] Build failed!
-        exit /b 1
-    )
-) else (
-    echo [INFO] Building ONEDIR executable (test mode)...
-    pyinstaller --clean --noconfirm TwitterScraper.spec
-    
-    if exist dist\TwitterScraper\TwitterScraper.exe (
-        echo.
-        echo ========================================
-        echo   BUILD SUCCESSFUL! (ONEDIR)
-        echo ========================================
-        echo.
-        echo Executable: dist\TwitterScraper\TwitterScraper.exe
-        echo.
-        echo NEXT STEPS:
-        echo   1. Test the exe by running it
-        echo   2. Verify _tcl_data and _tk_data folders exist in dist\TwitterScraper\
-        echo   3. If it works, build release with: build_windows.bat onefile
-    ) else (
-        echo [ERROR] Build failed!
-        exit /b 1
-    )
+if "%ONEFILE_MODE%"=="1" goto :build_onefile
+goto :build_onedir
+
+:build_onefile
+echo [INFO] Building ONEFILE executable - release mode...
+pyinstaller --clean --noconfirm TwitterScraper_onefile.spec
+
+if not exist dist\TwitterScraper.exe (
+    echo [ERROR] Build failed!
+    exit /b 1
 )
+
+echo.
+echo ========================================
+echo   BUILD SUCCESSFUL - ONEFILE
+echo ========================================
+echo.
+echo Executable: dist\TwitterScraper.exe
+echo.
+echo This is the release build - single file, no console.
+goto :build_done
+
+:build_onedir
+echo [INFO] Building ONEDIR executable - test mode...
+pyinstaller --clean --noconfirm TwitterScraper.spec
+
+if not exist dist\TwitterScraper\TwitterScraper.exe (
+    echo [ERROR] Build failed!
+    exit /b 1
+)
+
+echo.
+echo ========================================
+echo   BUILD SUCCESSFUL - ONEDIR
+echo ========================================
+echo.
+echo Executable: dist\TwitterScraper\TwitterScraper.exe
+echo.
+echo NEXT STEPS:
+echo   1. Test the exe by running it
+echo   2. Verify _tcl_data and _tk_data folders exist in dist\TwitterScraper\
+echo   3. If it works, build release with: build_windows.bat onefile
+goto :build_done
+
+:build_done
 
 REM Deactivate venv
 call deactivate
