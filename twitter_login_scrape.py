@@ -474,15 +474,49 @@ def open_login_page(auto_mode=False):
         
         # Get Chrome path and configure options
         chrome_path = find_chrome_path()
-        options = uc.ChromeOptions()
         
         if chrome_path:
             log_to_terminal(f"Using Chrome at: {chrome_path}", "#888888")
+        
+        # Configure options
+        options = uc.ChromeOptions()
+        
+        # Set binary location if found
+        if chrome_path:
             options.binary_location = chrome_path
         
-        # Create driver with explicit options
-        _driver = uc.Chrome(options=options, use_subprocess=True)
+        # Add some stability options
+        options.add_argument('--no-first-run')
+        options.add_argument('--no-service-autorun')
+        options.add_argument('--password-store=basic')
+        
+        # Try to create driver with version_main to help with driver matching
+        try:
+            # First attempt: let undetected_chromedriver auto-detect version
+            log_to_terminal("Attempting to start Chrome (auto-detect version)...", "#888888")
+            _driver = uc.Chrome(
+                options=options,
+                use_subprocess=True,
+                driver_executable_path=None,  # Let it download the right driver
+            )
+        except Exception as e1:
+            log_to_terminal(f"Auto-detect failed: {e1}", "#FFAA00")
+            log_to_terminal("Trying alternative method...", "#888888")
+            
+            # Second attempt: try without subprocess
+            try:
+                _driver = uc.Chrome(
+                    options=options,
+                    use_subprocess=False,
+                )
+            except Exception as e2:
+                log_to_terminal(f"Alternative method failed: {e2}", "#FFAA00")
+                
+                # Third attempt: minimal options
+                log_to_terminal("Trying minimal configuration...", "#888888")
+                _driver = uc.Chrome()
 
+        log_to_terminal("Chrome started successfully!", "#00FF04")
         log_to_terminal("Opening Twitter Login Page...", "#00BFFF")
         _driver.get("https://twitter.com/i/flow/login")
         
@@ -498,15 +532,24 @@ def open_login_page(auto_mode=False):
         
         return True
     except Exception as e:
-        error_msg = str(e).lower()
+        error_msg = str(e)
+        log_to_terminal(f"Full error: {error_msg}", "#FF4444")
         
-        # Provide helpful error messages
-        if 'binary' in error_msg or 'chrome' in error_msg:
-            log_to_terminal("Error: Chrome not found or not accessible.", "#FF4444")
+        # Provide helpful error messages based on error type
+        error_lower = error_msg.lower()
+        if 'binary' in error_lower:
+            log_to_terminal("Error: Chrome binary location issue.", "#FF4444")
+            log_to_terminal("Try reinstalling Chrome from: https://www.google.com/chrome/", "#FFAA00")
+        elif 'version' in error_lower or 'chromedriver' in error_lower:
+            log_to_terminal("Error: ChromeDriver version mismatch.", "#FF4444")
+            log_to_terminal("The tool will try to download the correct driver automatically.", "#FFAA00")
+            log_to_terminal("If this persists, try updating Chrome to the latest version.", "#FFAA00")
+        elif 'permission' in error_lower or 'access' in error_lower:
+            log_to_terminal("Error: Permission denied.", "#FF4444")
+            log_to_terminal("Try running the application as Administrator.", "#FFAA00")
+        else:
             log_to_terminal("Please ensure Chrome is installed correctly.", "#FFAA00")
             log_to_terminal("Download from: https://www.google.com/chrome/", "#FFAA00")
-        else:
-            log_to_terminal(f"Error opening browser: {e}", "#FF4444")
         
         # Clean up if partially created
         try:
