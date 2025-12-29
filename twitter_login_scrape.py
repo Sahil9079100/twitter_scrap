@@ -11,12 +11,15 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
-# Import GUI logger (will fallback to print if GUI not running)
+# Import GUI logger and paths (will fallback to defaults if GUI not running)
 try:
-    from panel import log_to_terminal
+    from panel import log_to_terminal, CONFIG_PATH, DATA_DIR
 except ImportError:
     def log_to_terminal(text, color="#ffffff"):
         print(text)
+    # Fallback paths for standalone execution
+    CONFIG_PATH = 'data.config.json'
+    DATA_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # --- GLOBAL STATE ---
 _driver = None
@@ -27,7 +30,7 @@ def load_config():
     """Load configuration from data.config.json"""
     global _config
     try:
-        with open('data.config.json', 'r', encoding='utf-8') as f:
+        with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
             _config = json.load(f)
         log_to_terminal(f"Config loaded: @{_config.get('username', 'unknown')}, limit: {_config.get('limit', 'unlimited')}", "#00BFFF")
         return _config
@@ -229,33 +232,37 @@ def login_to_x(driver, username, password):
         log_to_terminal(f"!! Login failed: {e}", "#FF4444")
         return False
 
-def run_automator():
+def run_automator() -> str:
     """
     Full automation: Load config, Open Browser, Auto-Login, Start Scraping.
+    
+    Returns:
+        str: Path to the generated JSON file, or None if failed.
     """
     global _driver, _config
     
     _config = load_config()
     if not _config:
-        return
+        return None
 
     my_username = _config.get('my_username')
     my_password = _config.get('my_password')
 
     if not my_username or not my_password:
         log_to_terminal("Error: Login credentials missing in config.", "#FF4444")
-        return
+        return None
 
     # Open Browser
     if not open_login_page(auto_mode=True):
-        return
+        return None
 
     # Auto Login
     if login_to_x(_driver, my_username, my_password):
-        # Start Scraping
-        start_scraping()
+        # Start Scraping and return JSON path
+        return start_scraping()
     else:
         log_to_terminal("Aborting scrape due to login failure.", "#FF4444")
+        return None
 
 def open_login_page(auto_mode=False):
     """Opens Chrome (undetected) and navigates to Twitter login page. Returns True on success."""
@@ -289,8 +296,13 @@ def open_login_page(auto_mode=False):
         _driver = None
         return False
 
-def start_scraping():
-    """Main scraping logic. Must be called after open_login_page() and manual login."""
+def start_scraping() -> str:
+    """
+    Main scraping logic. Must be called after open_login_page() and manual login.
+    
+    Returns:
+        str: Path to the generated JSON file, or None if scraping failed.
+    """
     global _driver, _config, _isScroll
     
     if not _driver:
@@ -308,12 +320,13 @@ def start_scraping():
     
     if not TARGET_USER:
         log_to_terminal("Error: No username configured.", "#FF4444")
-        return
+        return None
     
     log_to_terminal(f"Starting scrape for @{TARGET_USER} (limit: {TOTAL_LIMIT})...", "#00FF04")
     
     # Load existing data if file exists (Resumable)
-    filename = f"{TARGET_USER}_mega_scrape.json"
+    # Save JSON files to DATA_DIR for consistent location
+    filename = os.path.join(DATA_DIR, f"{TARGET_USER}_mega_scrape.json")
     scraped_data = []
     unique_ids = set()
     
@@ -500,6 +513,9 @@ def start_scraping():
             _driver.quit()
             _driver = None
         log_to_terminal(f"[COMPLETE] Saved {len(scraped_data)} tweets to {filename}", "#00FF04")
+    
+    # Return the JSON file path for PDF generation
+    return os.path.abspath(filename) if scraped_data else None
 
 def cleanup():
     """Close browser if open."""

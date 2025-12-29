@@ -1,5 +1,22 @@
+# Core dependencies
 selenium
 undetected-chromedriver
 webdriver-manager
-selenium
 yt-dlp
+
+# GUI
+customtkinter
+
+# PDF generation
+ijson
+requests
+Pillow
+reportlab
+
+# Build tools (install separately for building .exe)
+# pyinstaller
+# PDF Generator dependencies
+ijson
+reportlab
+requests
+Pillow

@@ -2,7 +2,9 @@
 import customtkinter as ctk
 import json
 import threading
+import sys
 from typing import Optional
+from tkinter import filedialog
 
 # Set appearance mode and color theme
 ctk.set_appearance_mode("dark")  # "dark", "light", or "system"
@@ -10,11 +12,46 @@ ctk.set_default_color_theme("blue")  # "blue", "green", or "dark-blue"
 
 # --- Global logging utility ---
 import os
-LOG_FILE = "scraper_logs.txt"
+
+# =============================================================================
+# DATA DIRECTORY SETUP (for .exe packaging)
+# =============================================================================
+def get_app_dir() -> str:
+    """
+    Returns the directory where the exe is located (if frozen),
+    or the script directory (if running from source).
+    """
+    if getattr(sys, 'frozen', False):
+        # Running as bundled exe
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.abspath(__file__))
+
+def get_data_dir() -> str:
+    """
+    Returns a writable directory for config/logs/output.
+    On Windows: Uses %APPDATA%/TwitterScraper if available, else app dir.
+    On Linux/Mac: Uses app dir.
+    """
+    if sys.platform == 'win32':
+        appdata = os.getenv('APPDATA')
+        if appdata:
+            data_dir = os.path.join(appdata, 'TwitterScraper')
+            os.makedirs(data_dir, exist_ok=True)
+            return data_dir
+    # Fallback: use app directory
+    return get_app_dir()
+
+# Exported paths for use by other modules
+DATA_DIR = get_data_dir()
+CONFIG_PATH = os.path.join(DATA_DIR, 'data.config.json')
+LOG_FILE = os.path.join(DATA_DIR, 'scraper_logs.txt')
 
 # Clear log file on start
-with open(LOG_FILE, "w", encoding="utf-8") as f:
-    f.write("")
+try:
+    with open(LOG_FILE, "w", encoding="utf-8") as f:
+        f.write("")
+except Exception as e:
+    print(f"Warning: Could not clear log file: {e}")
 
 def log_to_terminal(text: str, color: str = "#ffffff") -> None:
     """Write log to file with color code separator."""
@@ -290,6 +327,53 @@ class App(ctk.CTk):
         )
         self.my_pass_entry.pack(side="left")
         
+        # --- Row 4: Output Directory (PDF) ---
+        self.output_dir_frame = ctk.CTkFrame(self, fg_color="transparent")
+        self.output_dir_frame.pack(pady=(0, 20))
+        
+        self.output_dir_label = ctk.CTkLabel(
+            self.output_dir_frame,
+            text="Output Directory (PDF):",
+            font=("Consolas", 16),
+            text_color="#888888"
+        )
+        self.output_dir_label.pack(side="left", padx=(0, 15))
+        
+        self.output_dir_entry = ctk.CTkEntry(
+            self.output_dir_frame,
+            placeholder_text="Select folder for PDF output...",
+            font=("Consolas", 14),
+            width=380,
+            height=40,
+            corner_radius=0,
+            fg_color="#2a2a2a",
+            border_color="#5a5a5a",
+            border_width=2,
+            text_color="#ffffff",
+            placeholder_text_color="#666666"
+        )
+        self.output_dir_entry.pack(side="left", padx=(0, 10))
+        
+        self.browse_btn = ctk.CTkButton(
+            self.output_dir_frame,
+            text="Browse",
+            font=("Consolas", 14, "bold"),
+            width=100,
+            height=40,
+            corner_radius=0,
+            fg_color="#3a3a3a",
+            hover_color="#4a4a4a",
+            text_color="#ffffff",
+            border_width=2,
+            border_color="#5a5a5a",
+            command=self._browse_output_dir
+        )
+        self.browse_btn.pack(side="left")
+        self._create_tooltip(self.output_dir_label, "Select the folder where the PDF will be saved\nafter scraping completes")
+        
+        # Store selected output directory
+        self.selected_output_dir = None
+        
         # --- Next Button ---
         self.next_btn = ctk.CTkButton(
             self,
@@ -309,6 +393,17 @@ class App(ctk.CTk):
 
         # --- Terminal (fills remaining space) ---
         self._create_terminal()
+    
+    def _browse_output_dir(self):
+        """Open folder picker dialog for PDF output directory."""
+        directory = filedialog.askdirectory(
+            title="Select Output Directory for PDF",
+            mustexist=True
+        )
+        if directory:
+            self.selected_output_dir = directory
+            self.output_dir_entry.delete(0, 'end')
+            self.output_dir_entry.insert(0, directory)
     
     def _on_start_click(self):
         """Handle START SCRAPING button click."""
@@ -348,6 +443,21 @@ class App(ctk.CTk):
         else:
             _my_pass = self.my_pass_entry.get()
         
+        # Validate Output Directory
+        output_dir = self.output_dir_entry.get().strip()
+        if not output_dir or output_dir == "Select folder for PDF output...":
+            self.output_dir_entry.delete(0, 'end')
+            self.output_dir_entry.insert(0, "Please select output directory")
+            self.after(2000, lambda: self.output_dir_entry.delete(0, 'end'))
+            log_to_terminal("Error: Please select an output directory for PDF.", "#FF4444")
+            return
+        
+        if not os.path.isdir(output_dir):
+            log_to_terminal(f"Error: Directory does not exist: {output_dir}", "#FF4444")
+            return
+        
+        self.selected_output_dir = output_dir
+        
         data = {
             "username": _username,
             "limit": _limit,
@@ -358,8 +468,9 @@ class App(ctk.CTk):
         # Save config
         log_to_terminal("Configuration saved.", "#31E934")
         try:
-            with open('data.config.json', 'w', encoding='utf-8') as f:
+            with open(CONFIG_PATH, 'w', encoding='utf-8') as f:
                 json.dump(data, f, indent=4, ensure_ascii=False)
+            log_to_terminal(f"Config saved to: {CONFIG_PATH}", "#888888")
         except IOError as e:
             log_to_terminal(f"Error saving config: {e}", "#FF4444")
             return
@@ -368,20 +479,46 @@ class App(ctk.CTk):
         log_to_terminal("Initializing automation...", "#00FF04")
         self.next_btn.configure(state="disabled", text="RUNNING...")
         
+        # Capture output_dir for the thread
+        pdf_output_dir = self.selected_output_dir
+        
         def run_scraper():
+            json_path = None
             try:
                 import twitter_login_scrape as scraper
                 # Reload config in module to pick up new file
                 scraper.load_config()
-                scraper.run_automator()
+                json_path = scraper.run_automator()
             except Exception as e:
                 log_to_terminal(f"Scraper error: {e}", "#FF4444")
-            finally:
-                self.after(0, lambda: self.next_btn.configure(
-                    state="normal",
-                    text="START SCRAPING",
-                    command=self._on_start_click
-                ))
+            
+            # PDF Generation (only if scraping succeeded)
+            if json_path and os.path.exists(json_path):
+                try:
+                    log_to_terminal("Starting PDF generation...", "#00BFFF")
+                    from json_to_pdf import generate_pdf, set_logger
+                    # Set the logger so json_to_pdf outputs go to GUI
+                    set_logger(log_to_terminal)
+                    pdf_path = generate_pdf(json_path, pdf_output_dir)
+                    log_to_terminal(f"[SUCCESS] PDF saved to: {pdf_path}", "#00FF04")
+                    
+                    # Delete JSON file after PDF generation
+                    try:
+                        os.unlink(json_path)
+                        log_to_terminal(f"Cleaned up JSON file: {json_path}", "#888888")
+                    except Exception as e:
+                        log_to_terminal(f"[WARN] Failed to delete JSON file: {e}", "#FFAA00")
+                except Exception as e:
+                    log_to_terminal(f"PDF generation failed: {e}", "#FF4444")
+            elif json_path is None:
+                log_to_terminal("Skipping PDF generation (scraping failed or no data).", "#FFAA00")
+            
+            # Re-enable button
+            self.after(0, lambda: self.next_btn.configure(
+                state="normal",
+                text="START SCRAPING",
+                command=self._on_start_click
+            ))
         
         thread = threading.Thread(target=run_scraper, daemon=True)
         thread.start()
