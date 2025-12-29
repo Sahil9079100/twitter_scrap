@@ -5,9 +5,41 @@ Build with: pyinstaller TwitterScraper.spec
 """
 
 import sys
+import os
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 block_cipher = None
+
+# =============================================================================
+# FIX FOR TKINTER TCL/TK DATA FILES
+# =============================================================================
+import tkinter
+import _tkinter
+
+# Find Tcl/Tk data directories
+TCL_LIBRARY = os.environ.get('TCL_LIBRARY', '')
+TK_LIBRARY = os.environ.get('TK_LIBRARY', '')
+
+# Try to find from tkinter if env vars not set
+if not TCL_LIBRARY or not TK_LIBRARY:
+    try:
+        root = tkinter.Tk()
+        TCL_LIBRARY = root.tk.exprstring('$tcl_library')
+        TK_LIBRARY = root.tk.exprstring('$tk_library')
+        root.destroy()
+    except:
+        pass
+
+# Build tcl/tk data paths
+tcl_tk_datas = []
+if TCL_LIBRARY and os.path.isdir(TCL_LIBRARY):
+    tcl_tk_datas.append((TCL_LIBRARY, '_tcl_data'))
+if TK_LIBRARY and os.path.isdir(TK_LIBRARY):
+    tcl_tk_datas.append((TK_LIBRARY, '_tk_data'))
+
+# =============================================================================
+# HIDDEN IMPORTS
+# =============================================================================
 
 # Collect hidden imports for libraries that dynamically import modules
 hiddenimports = [
@@ -55,6 +87,9 @@ hiddenimports += collect_submodules('reportlab')
 
 # Collect data files for customtkinter (themes, assets)
 datas = collect_data_files('customtkinter')
+
+# Add Tcl/Tk data directories
+datas += tcl_tk_datas
 
 a = Analysis(
     ['panel.py'],

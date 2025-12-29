@@ -72,7 +72,23 @@ Write-Host "[INFO] Building executable..." -ForegroundColor Yellow
 
 if ($Debug) {
     Write-Host "[DEBUG] Building with console window enabled for debugging..." -ForegroundColor Magenta
-    # Modify spec temporarily for debug build
+    
+    # Get Tcl/Tk paths from Python
+    $tclPath = python -c "import tkinter; root = tkinter.Tk(); print(root.tk.exprstring('`$tcl_library')); root.destroy()" 2>$null
+    $tkPath = python -c "import tkinter; root = tkinter.Tk(); print(root.tk.exprstring('`$tk_library')); root.destroy()" 2>$null
+    
+    $addDataArgs = @()
+    if ($tclPath -and (Test-Path $tclPath)) {
+        $addDataArgs += "--add-data"
+        $addDataArgs += "$tclPath;_tcl_data"
+        Write-Host "[INFO] Found Tcl at: $tclPath" -ForegroundColor Cyan
+    }
+    if ($tkPath -and (Test-Path $tkPath)) {
+        $addDataArgs += "--add-data"
+        $addDataArgs += "$tkPath;_tk_data"
+        Write-Host "[INFO] Found Tk at: $tkPath" -ForegroundColor Cyan
+    }
+    
     pyinstaller --clean --noconfirm `
         --onefile `
         --name "TwitterScraper" `
@@ -90,6 +106,7 @@ if ($Debug) {
         --hidden-import reportlab `
         --hidden-import selenium `
         --hidden-import undetected_chromedriver `
+        @addDataArgs `
         --console `
         panel.py
 } else {
