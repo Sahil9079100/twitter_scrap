@@ -5,6 +5,10 @@ import random
 import re
 import os
 import yt_dlp
+import subprocess
+import sys
+import urllib.request
+import tempfile
 from datetime import datetime, timedelta
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
@@ -25,6 +29,198 @@ except ImportError:
 _driver = None
 _config = None
 _isScroll = False
+
+
+# =============================================================================
+# CHROME DETECTION AND AUTO-INSTALLATION
+# =============================================================================
+
+def find_chrome_path():
+    """
+    Find Google Chrome installation path on Windows.
+    Returns the path to chrome.exe if found, None otherwise.
+    """
+    if sys.platform != 'win32':
+        # On Linux/Mac, just check if chrome is in PATH
+        try:
+            result = subprocess.run(['which', 'google-chrome'], capture_output=True, text=True)
+            if result.returncode == 0:
+                return result.stdout.strip()
+        except:
+            pass
+        return None
+    
+    # Windows: Check common Chrome installation paths
+    possible_paths = [
+        os.path.join(os.environ.get('PROGRAMFILES', ''), 'Google', 'Chrome', 'Application', 'chrome.exe'),
+        os.path.join(os.environ.get('PROGRAMFILES(X86)', ''), 'Google', 'Chrome', 'Application', 'chrome.exe'),
+        os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Google', 'Chrome', 'Application', 'chrome.exe'),
+        os.path.join(os.environ.get('APPDATA', ''), 'Google', 'Chrome', 'Application', 'chrome.exe'),
+    ]
+    
+    for path in possible_paths:
+        if path and os.path.isfile(path):
+            return path
+    
+    # Also check registry
+    try:
+        import winreg
+        key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r'SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\chrome.exe')
+        chrome_path = winreg.QueryValue(key, None)
+        winreg.CloseKey(key)
+        if chrome_path and os.path.isfile(chrome_path):
+            return chrome_path
+    except:
+        pass
+    
+    return None
+
+
+def is_chrome_installed():
+    """Check if Google Chrome is installed."""
+    return find_chrome_path() is not None
+
+
+def download_chrome_installer(progress_callback=None):
+    """
+    Download Chrome installer to temp directory.
+    Returns path to installer or None if failed.
+    """
+    # Chrome standalone installer URL (offline installer)
+    chrome_url = "https://dl.google.com/chrome/install/latest/chrome_installer.exe"
+    
+    temp_dir = tempfile.gettempdir()
+    installer_path = os.path.join(temp_dir, "chrome_installer.exe")
+    
+    try:
+        if progress_callback:
+            progress_callback("Downloading Google Chrome installer...")
+        
+        log_to_terminal("Downloading Chrome installer...", "#00BFFF")
+        
+        # Download with progress
+        def reporthook(block_num, block_size, total_size):
+            if total_size > 0:
+                percent = min(100, (block_num * block_size * 100) // total_size)
+                if block_num % 50 == 0:  # Log every 50 blocks
+                    log_to_terminal(f"Download progress: {percent}%", "#888888")
+        
+        urllib.request.urlretrieve(chrome_url, installer_path, reporthook)
+        
+        if os.path.isfile(installer_path):
+            log_to_terminal("Chrome installer downloaded successfully.", "#00FF04")
+            return installer_path
+        else:
+            log_to_terminal("Failed to download Chrome installer.", "#FF4444")
+            return None
+            
+    except Exception as e:
+        log_to_terminal(f"Error downloading Chrome: {e}", "#FF4444")
+        return None
+
+
+def install_chrome(installer_path, progress_callback=None):
+    """
+    Run Chrome installer silently.
+    Returns True if installation appears successful.
+    """
+    try:
+        if progress_callback:
+            progress_callback("Installing Google Chrome (this may take a minute)...")
+        
+        log_to_terminal("Installing Chrome silently...", "#00BFFF")
+        log_to_terminal("(This may take 1-2 minutes, please wait...)", "#888888")
+        
+        # Run installer with silent flags
+        # /silent /install - silent installation
+        result = subprocess.run(
+            [installer_path, '/silent', '/install'],
+            capture_output=True,
+            timeout=300  # 5 minute timeout
+        )
+        
+        # Wait a bit for installation to complete
+        time.sleep(5)
+        
+        # Verify installation
+        if is_chrome_installed():
+            log_to_terminal("Google Chrome installed successfully!", "#00FF04")
+            return True
+        else:
+            log_to_terminal("Chrome installation may have failed. Please try installing manually.", "#FF4444")
+            return False
+            
+    except subprocess.TimeoutExpired:
+        log_to_terminal("Installation timed out. Please try installing Chrome manually.", "#FF4444")
+        return False
+    except Exception as e:
+        log_to_terminal(f"Error installing Chrome: {e}", "#FF4444")
+        return False
+    finally:
+        # Clean up installer
+        try:
+            if os.path.isfile(installer_path):
+                os.remove(installer_path)
+        except:
+            pass
+
+
+def ensure_chrome_installed():
+    """
+    Check if Chrome is installed, offer to install if not.
+    Returns True if Chrome is available, False otherwise.
+    """
+    if is_chrome_installed():
+        log_to_terminal("Google Chrome detected.", "#00FF04")
+        return True
+    
+    log_to_terminal("Google Chrome not found on this system.", "#FFAA00")
+    log_to_terminal("Chrome is required for scraping Twitter.", "#FFAA00")
+    
+    # Ask user for permission via a simple dialog
+    try:
+        import tkinter as tk
+        from tkinter import messagebox
+        
+        # Create hidden root window
+        root = tk.Tk()
+        root.withdraw()
+        root.attributes('-topmost', True)
+        
+        response = messagebox.askyesno(
+            "Google Chrome Required",
+            "Google Chrome is required for this scraper to work.\n\n"
+            "Chrome was not found on your system.\n\n"
+            "Would you like to download and install Chrome automatically?\n\n"
+            "(This will download ~90MB and install silently)",
+            parent=root
+        )
+        
+        root.destroy()
+        
+        if not response:
+            log_to_terminal("Chrome installation declined by user.", "#FF4444")
+            log_to_terminal("Please install Chrome manually from: https://www.google.com/chrome/", "#FFAA00")
+            return False
+        
+    except Exception as e:
+        log_to_terminal(f"Could not show dialog: {e}", "#FF4444")
+        log_to_terminal("Please install Chrome manually from: https://www.google.com/chrome/", "#FFAA00")
+        return False
+    
+    # User agreed - download and install
+    log_to_terminal("User approved Chrome installation.", "#00BFFF")
+    
+    installer_path = download_chrome_installer()
+    if not installer_path:
+        log_to_terminal("Please install Chrome manually from: https://www.google.com/chrome/", "#FFAA00")
+        return False
+    
+    if install_chrome(installer_path):
+        return True
+    else:
+        log_to_terminal("Please install Chrome manually from: https://www.google.com/chrome/", "#FFAA00")
+        return False
 
 def load_config():
     """Load configuration from data.config.json"""
@@ -267,6 +463,12 @@ def run_automator() -> str:
 def open_login_page(auto_mode=False):
     """Opens Chrome (undetected) and navigates to Twitter login page. Returns True on success."""
     global _driver
+    
+    # First, ensure Chrome is installed
+    if not ensure_chrome_installed():
+        log_to_terminal("Cannot proceed without Google Chrome.", "#FF4444")
+        return False
+    
     try:
         log_to_terminal("Starting Undetected Chrome...", "#00BFFF")
         _driver = uc.Chrome(use_subprocess=True)
@@ -286,7 +488,16 @@ def open_login_page(auto_mode=False):
         
         return True
     except Exception as e:
-        log_to_terminal(f"Error opening browser: {e}", "#FF4444")
+        error_msg = str(e).lower()
+        
+        # Provide helpful error messages
+        if 'binary' in error_msg or 'chrome' in error_msg:
+            log_to_terminal("Error: Chrome not found or not accessible.", "#FF4444")
+            log_to_terminal("Please ensure Chrome is installed correctly.", "#FFAA00")
+            log_to_terminal("Download from: https://www.google.com/chrome/", "#FFAA00")
+        else:
+            log_to_terminal(f"Error opening browser: {e}", "#FF4444")
+        
         # Clean up if partially created
         try:
             if _driver:
