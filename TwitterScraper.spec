@@ -11,22 +11,47 @@ block_cipher = None
 
 # Collect hidden imports for libraries that dynamically import modules
 hiddenimports = [
+    # Tkinter (required for customtkinter)
+    'tkinter',
+    'tkinter.ttk',
+    'tkinter.filedialog',
+    'tkinter.messagebox',
+    '_tkinter',
+    # CustomTkinter
     'customtkinter',
+    # Other dependencies
     'yt_dlp',
     'ijson',
     'ijson.backends',
     'ijson.backends.python',
     'PIL',
     'PIL.Image',
+    'PIL._tkinter_finder',
     'reportlab',
     'reportlab.platypus',
     'reportlab.lib',
+    'reportlab.lib.colors',
+    'reportlab.lib.pagesizes',
+    'reportlab.lib.styles',
+    'reportlab.lib.units',
+    'reportlab.lib.enums',
+    'reportlab.platypus.doctemplate',
+    'reportlab.platypus.flowables',
+    'reportlab.platypus.paragraph',
     'selenium',
     'selenium.webdriver',
     'selenium.webdriver.common',
+    'selenium.webdriver.common.by',
+    'selenium.webdriver.common.keys',
     'selenium.webdriver.support',
+    'selenium.webdriver.support.ui',
+    'selenium.webdriver.support.expected_conditions',
     'undetected_chromedriver',
 ]
+
+# Collect all submodules for complex packages
+hiddenimports += collect_submodules('customtkinter')
+hiddenimports += collect_submodules('reportlab')
 
 # Collect data files for customtkinter (themes, assets)
 datas = collect_data_files('customtkinter')

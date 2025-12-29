@@ -76,12 +76,17 @@ if ($Debug) {
     pyinstaller --clean --noconfirm `
         --onefile `
         --name "TwitterScraper" `
-        --add-data "$(python -c 'import customtkinter; print(customtkinter.__path__[0])');customtkinter" `
+        --collect-all customtkinter `
+        --hidden-import tkinter `
+        --hidden-import tkinter.ttk `
+        --hidden-import tkinter.filedialog `
+        --hidden-import _tkinter `
         --hidden-import customtkinter `
         --hidden-import yt_dlp `
         --hidden-import ijson `
         --hidden-import ijson.backends.python `
         --hidden-import PIL `
+        --hidden-import PIL._tkinter_finder `
         --hidden-import reportlab `
         --hidden-import selenium `
         --hidden-import undetected_chromedriver `

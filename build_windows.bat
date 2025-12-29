@@ -67,14 +67,20 @@ echo [INFO] Building executable...
 if "%DEBUG_MODE%"=="1" (
     echo [DEBUG] Building with console window enabled...
     pyinstaller --clean --noconfirm --onefile --name "TwitterScraper" --console ^
+        --hidden-import tkinter ^
+        --hidden-import tkinter.ttk ^
+        --hidden-import tkinter.filedialog ^
+        --hidden-import _tkinter ^
         --hidden-import customtkinter ^
         --hidden-import yt_dlp ^
         --hidden-import ijson ^
         --hidden-import ijson.backends.python ^
         --hidden-import PIL ^
+        --hidden-import PIL._tkinter_finder ^
         --hidden-import reportlab ^
         --hidden-import selenium ^
         --hidden-import undetected_chromedriver ^
+        --collect-all customtkinter ^
         panel.py
 ) else (
     pyinstaller --clean --noconfirm TwitterScraper.spec
