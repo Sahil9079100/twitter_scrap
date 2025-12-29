@@ -3,11 +3,14 @@ REM ============================================
 REM TwitterScraper Windows Build Script (Batch)
 REM ============================================
 REM
-REM Usage: build_windows.bat
-REM        build_windows.bat debug   (builds with console visible)
-REM        build_windows.bat clean   (cleans build artifacts first)
+REM Usage: 
+REM   build_windows.bat           (build onedir for testing)
+REM   build_windows.bat onefile   (build single exe for release)
+REM   build_windows.bat clean     (clean build artifacts first)
 REM
-REM Requires: Python 3.9+ in PATH
+REM IMPORTANT: Run copy_tcl_tk.py ONCE before first build!
+REM
+REM Requires: Python 3.9+ from python.org (NOT MS Store, NOT Anaconda)
 
 setlocal enabledelayedexpansion
 
@@ -17,22 +20,36 @@ echo ========================================
 echo.
 
 REM Check for arguments
-set "DEBUG_MODE=0"
+set "ONEFILE_MODE=0"
 set "CLEAN_MODE=0"
-if /i "%1"=="debug" set "DEBUG_MODE=1"
+if /i "%1"=="onefile" set "ONEFILE_MODE=1"
 if /i "%1"=="clean" set "CLEAN_MODE=1"
-if /i "%2"=="debug" set "DEBUG_MODE=1"
+if /i "%2"=="onefile" set "ONEFILE_MODE=1"
 if /i "%2"=="clean" set "CLEAN_MODE=1"
 
 REM Check Python is available
 python --version >nul 2>&1
 if errorlevel 1 (
-    echo [ERROR] Python not found in PATH. Please install Python 3.9+ and try again.
+    echo [ERROR] Python not found in PATH.
+    echo [ERROR] Install Python 3.9+ from python.org
+    echo [ERROR] DO NOT use MS Store Python or Anaconda!
     exit /b 1
 )
 
 for /f "tokens=*" %%i in ('python --version 2^>^&1') do set PYVER=%%i
 echo [OK] Found: %PYVER%
+
+REM Check if Tcl/Tk has been copied
+if not exist "build_assets\tcl\tcl8.6\init.tcl" (
+    echo.
+    echo [ERROR] Tcl/Tk files not found!
+    echo [ERROR] Run this command first:
+    echo.
+    echo     python copy_tcl_tk.py
+    echo.
+    exit /b 1
+)
+echo [OK] Tcl/Tk files found in build_assets
 
 REM Clean if requested
 if "%CLEAN_MODE%"=="1" (
@@ -40,7 +57,6 @@ if "%CLEAN_MODE%"=="1" (
     if exist build rmdir /s /q build
     if exist dist rmdir /s /q dist
     if exist .build_venv rmdir /s /q .build_venv
-    if exist pyi_rth_tkpath.py del /f pyi_rth_tkpath.py
 )
 
 REM Create virtual environment
@@ -63,50 +79,43 @@ echo [INFO] Dependencies installed successfully.
 echo.
 
 REM Build exe
-echo [INFO] Building executable...
-
-if "%DEBUG_MODE%"=="1" (
-    echo [DEBUG] Building with console window enabled...
-    pyinstaller --clean --noconfirm --onefile --name "TwitterScraper" --console ^
-        --collect-all customtkinter ^
-        --collect-all tkinter ^
-        --hidden-import tkinter ^
-        --hidden-import tkinter.ttk ^
-        --hidden-import tkinter.filedialog ^
-        --hidden-import _tkinter ^
-        --hidden-import PIL._tkinter_finder ^
-        --hidden-import yt_dlp ^
-        --hidden-import ijson ^
-        --hidden-import reportlab ^
-        --hidden-import selenium ^
-        --hidden-import undetected_chromedriver ^
-        --hidden-import websockets ^
-        --hidden-import requests ^
-        --hidden-import certifi ^
-        panel.py
+if "%ONEFILE_MODE%"=="1" (
+    echo [INFO] Building ONEFILE executable (release mode)...
+    pyinstaller --clean --noconfirm TwitterScraper_onefile.spec
+    
+    if exist dist\TwitterScraper.exe (
+        echo.
+        echo ========================================
+        echo   BUILD SUCCESSFUL! (ONEFILE)
+        echo ========================================
+        echo.
+        echo Executable: dist\TwitterScraper.exe
+        echo.
+        echo This is the release build - single file, no console.
+    ) else (
+        echo [ERROR] Build failed!
+        exit /b 1
+    )
 ) else (
+    echo [INFO] Building ONEDIR executable (test mode)...
     pyinstaller --clean --noconfirm TwitterScraper.spec
-)
-
-REM Check if build succeeded
-if exist dist\TwitterScraper.exe (
-    echo.
-    echo ========================================
-    echo   BUILD SUCCESSFUL!
-    echo ========================================
-    echo.
-    echo Executable: dist\TwitterScraper.exe
-    echo.
-    echo To run: double-click the exe or run from terminal:
-    echo   dist\TwitterScraper.exe
-    echo.
-    echo Config/logs will be saved to:
-    echo   %%APPDATA%%\TwitterScraper\
-) else (
-    echo.
-    echo [ERROR] Build failed - exe not found at dist\TwitterScraper.exe
-    echo Check the output above for errors.
-    exit /b 1
+    
+    if exist dist\TwitterScraper\TwitterScraper.exe (
+        echo.
+        echo ========================================
+        echo   BUILD SUCCESSFUL! (ONEDIR)
+        echo ========================================
+        echo.
+        echo Executable: dist\TwitterScraper\TwitterScraper.exe
+        echo.
+        echo NEXT STEPS:
+        echo   1. Test the exe by running it
+        echo   2. Verify _tcl_data and _tk_data folders exist in dist\TwitterScraper\
+        echo   3. If it works, build release with: build_windows.bat onefile
+    ) else (
+        echo [ERROR] Build failed!
+        exit /b 1
+    )
 )
 
 REM Deactivate venv

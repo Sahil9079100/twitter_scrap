@@ -4,18 +4,24 @@
 
 .DESCRIPTION
     This script:
-    1. Creates a fresh virtual environment
-    2. Installs all dependencies
-    3. Builds the .exe using PyInstaller
-    4. Outputs the exe to the dist/ folder
+    1. Verifies Tcl/Tk files are present (run copy_tcl_tk.py first!)
+    2. Creates a virtual environment
+    3. Installs all dependencies
+    4. Builds the .exe using PyInstaller
 
 .NOTES
-    Run from PowerShell:  .\build_windows.ps1
-    Requires: Python 3.9+ installed and in PATH
+    Run from PowerShell:
+      .\build_windows.ps1           (build onedir for testing)
+      .\build_windows.ps1 -OneFile  (build single exe for release)
+      .\build_windows.ps1 -Clean    (clean first)
+
+    IMPORTANT: Run copy_tcl_tk.py ONCE before first build!
+    
+    Requires: Python 3.9+ from python.org (NOT MS Store, NOT Anaconda)
 #>
 
 param(
-    [switch]$Debug,      # Build with console window visible for debugging
+    [switch]$OneFile,    # Build single exe (use after onedir works)
     [switch]$Clean       # Clean build artifacts before building
 )
 
@@ -31,9 +37,24 @@ try {
     $pythonVersion = python --version 2>&1
     Write-Host "[OK] Found: $pythonVersion" -ForegroundColor Green
 } catch {
-    Write-Host "[ERROR] Python not found in PATH. Please install Python 3.9+ and try again." -ForegroundColor Red
+    Write-Host "[ERROR] Python not found in PATH." -ForegroundColor Red
+    Write-Host "[ERROR] Install Python 3.9+ from python.org" -ForegroundColor Red
+    Write-Host "[ERROR] DO NOT use MS Store Python or Anaconda!" -ForegroundColor Red
     exit 1
 }
+
+# Check if Tcl/Tk has been copied
+$tclInit = "build_assets\tcl\tcl8.6\init.tcl"
+if (-not (Test-Path $tclInit)) {
+    Write-Host ""
+    Write-Host "[ERROR] Tcl/Tk files not found!" -ForegroundColor Red
+    Write-Host "[ERROR] Run this command first:" -ForegroundColor Red
+    Write-Host ""
+    Write-Host "    python copy_tcl_tk.py" -ForegroundColor Yellow
+    Write-Host ""
+    exit 1
+}
+Write-Host "[OK] Tcl/Tk files found in build_assets" -ForegroundColor Green
 
 # Clean previous builds if requested
 if ($Clean) {
@@ -41,7 +62,6 @@ if ($Clean) {
     if (Test-Path "build") { Remove-Item -Recurse -Force "build" }
     if (Test-Path "dist") { Remove-Item -Recurse -Force "dist" }
     if (Test-Path ".build_venv") { Remove-Item -Recurse -Force ".build_venv" }
-    if (Test-Path "pyi_rth_tkpath.py") { Remove-Item -Force "pyi_rth_tkpath.py" }
 }
 
 # Create virtual environment for build
@@ -66,62 +86,50 @@ pip install -r requirements.txt --quiet
 pip install pyinstaller --quiet
 
 Write-Host "[INFO] Dependencies installed successfully." -ForegroundColor Green
+Write-Host ""
 
 # Build exe
-Write-Host ""
-Write-Host "[INFO] Building executable..." -ForegroundColor Yellow
-
-if ($Debug) {
-    Write-Host "[DEBUG] Building with console window enabled for debugging..." -ForegroundColor Magenta
+if ($OneFile) {
+    Write-Host "[INFO] Building ONEFILE executable (release mode)..." -ForegroundColor Yellow
+    pyinstaller --clean --noconfirm TwitterScraper_onefile.spec
     
-    # For debug, build with console and all imports
-    pyinstaller --clean --noconfirm `
-        --onefile `
-        --name "TwitterScraper" `
-        --collect-all customtkinter `
-        --collect-all tkinter `
-        --hidden-import tkinter `
-        --hidden-import tkinter.ttk `
-        --hidden-import tkinter.filedialog `
-        --hidden-import _tkinter `
-        --hidden-import PIL._tkinter_finder `
-        --hidden-import yt_dlp `
-        --hidden-import ijson `
-        --hidden-import reportlab `
-        --hidden-import selenium `
-        --hidden-import undetected_chromedriver `
-        --hidden-import websockets `
-        --hidden-import requests `
-        --hidden-import certifi `
-        --console `
-        panel.py
+    $exePath = "dist\TwitterScraper.exe"
+    if (Test-Path $exePath) {
+        $exeSize = (Get-Item $exePath).Length / 1MB
+        Write-Host ""
+        Write-Host "========================================" -ForegroundColor Green
+        Write-Host "  BUILD SUCCESSFUL! (ONEFILE)" -ForegroundColor Green
+        Write-Host "========================================" -ForegroundColor Green
+        Write-Host ""
+        Write-Host "Executable: $exePath" -ForegroundColor Cyan
+        Write-Host "Size: $([math]::Round($exeSize, 2)) MB" -ForegroundColor Cyan
+        Write-Host ""
+        Write-Host "This is the release build - single file, no console." -ForegroundColor Yellow
+    } else {
+        Write-Host "[ERROR] Build failed!" -ForegroundColor Red
+        exit 1
+    }
 } else {
-    # Use spec file for production build
+    Write-Host "[INFO] Building ONEDIR executable (test mode)..." -ForegroundColor Yellow
     pyinstaller --clean --noconfirm TwitterScraper.spec
-}
-
-# Check if build succeeded
-$exePath = Join-Path "dist" "TwitterScraper.exe"
-if (Test-Path $exePath) {
-    $exeSize = (Get-Item $exePath).Length / 1MB
-    Write-Host ""
-    Write-Host "========================================" -ForegroundColor Green
-    Write-Host "  BUILD SUCCESSFUL!" -ForegroundColor Green
-    Write-Host "========================================" -ForegroundColor Green
-    Write-Host ""
-    Write-Host "Executable: $exePath" -ForegroundColor Cyan
-    Write-Host "Size: $([math]::Round($exeSize, 2)) MB" -ForegroundColor Cyan
-    Write-Host ""
-    Write-Host "To run: double-click the exe or run from terminal:" -ForegroundColor Yellow
-    Write-Host "  .\dist\TwitterScraper.exe" -ForegroundColor White
-    Write-Host ""
-    Write-Host "Config/logs will be saved to:" -ForegroundColor Yellow
-    Write-Host "  %APPDATA%\TwitterScraper\" -ForegroundColor White
-} else {
-    Write-Host ""
-    Write-Host "[ERROR] Build failed - exe not found at $exePath" -ForegroundColor Red
-    Write-Host "Check the output above for errors." -ForegroundColor Red
-    exit 1
+    
+    $exePath = "dist\TwitterScraper\TwitterScraper.exe"
+    if (Test-Path $exePath) {
+        Write-Host ""
+        Write-Host "========================================" -ForegroundColor Green
+        Write-Host "  BUILD SUCCESSFUL! (ONEDIR)" -ForegroundColor Green
+        Write-Host "========================================" -ForegroundColor Green
+        Write-Host ""
+        Write-Host "Executable: $exePath" -ForegroundColor Cyan
+        Write-Host ""
+        Write-Host "NEXT STEPS:" -ForegroundColor Yellow
+        Write-Host "  1. Test the exe by running it" -ForegroundColor White
+        Write-Host "  2. Verify _tcl_data and _tk_data folders exist in dist\TwitterScraper\" -ForegroundColor White
+        Write-Host "  3. If it works, build release with: .\build_windows.ps1 -OneFile" -ForegroundColor White
+    } else {
+        Write-Host "[ERROR] Build failed!" -ForegroundColor Red
+        exit 1
+    }
 }
 
 # Deactivate venv
