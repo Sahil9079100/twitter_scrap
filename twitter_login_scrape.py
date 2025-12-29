@@ -472,49 +472,77 @@ def open_login_page(auto_mode=False):
     try:
         log_to_terminal("Starting Undetected Chrome...", "#00BFFF")
         
-        # Get Chrome path and configure options
+        # Get Chrome path
         chrome_path = find_chrome_path()
         
         if chrome_path:
             log_to_terminal(f"Using Chrome at: {chrome_path}", "#888888")
         
-        # Configure options
+        # Configure options for better compatibility with frozen exe
         options = uc.ChromeOptions()
         
         # Set binary location if found
         if chrome_path:
             options.binary_location = chrome_path
         
-        # Add some stability options
+        # Critical options for packaged exe compatibility
         options.add_argument('--no-first-run')
         options.add_argument('--no-service-autorun')
         options.add_argument('--password-store=basic')
+        options.add_argument('--no-sandbox')
+        options.add_argument('--disable-dev-shm-usage')
+        options.add_argument('--disable-blink-features=AutomationControlled')
+        options.add_argument('--disable-infobars')
         
-        # Try to create driver with version_main to help with driver matching
+        # Use a dedicated user data directory to avoid conflicts
+        user_data_dir = os.path.join(tempfile.gettempdir(), 'uc_twitter_scraper')
+        os.makedirs(user_data_dir, exist_ok=True)
+        options.add_argument(f'--user-data-dir={user_data_dir}')
+        
+        log_to_terminal("Launching Chrome browser...", "#888888")
+        
+        # Create driver with specific settings for frozen exe
         try:
-            # First attempt: let undetected_chromedriver auto-detect version
-            log_to_terminal("Attempting to start Chrome (auto-detect version)...", "#888888")
             _driver = uc.Chrome(
                 options=options,
-                use_subprocess=True,
-                driver_executable_path=None,  # Let it download the right driver
+                use_subprocess=False,  # Important for frozen exe
+                version_main=None,     # Auto-detect Chrome version
             )
         except Exception as e1:
-            log_to_terminal(f"Auto-detect failed: {e1}", "#FFAA00")
-            log_to_terminal("Trying alternative method...", "#888888")
+            log_to_terminal(f"First attempt failed: {e1}", "#FFAA00")
+            log_to_terminal("Trying with subprocess mode...", "#888888")
             
-            # Second attempt: try without subprocess
+            # Reset options (can't reuse)
+            options2 = uc.ChromeOptions()
+            if chrome_path:
+                options2.binary_location = chrome_path
+            options2.add_argument('--no-first-run')
+            options2.add_argument('--no-sandbox')
+            options2.add_argument('--disable-dev-shm-usage')
+            
             try:
                 _driver = uc.Chrome(
-                    options=options,
-                    use_subprocess=False,
+                    options=options2,
+                    use_subprocess=True,
                 )
             except Exception as e2:
-                log_to_terminal(f"Alternative method failed: {e2}", "#FFAA00")
+                log_to_terminal(f"Subprocess mode failed: {e2}", "#FFAA00")
+                log_to_terminal("Trying headless mode as fallback...", "#888888")
                 
-                # Third attempt: minimal options
-                log_to_terminal("Trying minimal configuration...", "#888888")
-                _driver = uc.Chrome()
+                # Last resort: try headless mode
+                options3 = uc.ChromeOptions()
+                if chrome_path:
+                    options3.binary_location = chrome_path
+                options3.add_argument('--headless=new')
+                options3.add_argument('--no-sandbox')
+                options3.add_argument('--disable-dev-shm-usage')
+                options3.add_argument('--disable-gpu')
+                
+                _driver = uc.Chrome(
+                    options=options3,
+                    use_subprocess=False,
+                    headless=True,
+                )
 
         log_to_terminal("Chrome started successfully!", "#00FF04")
         log_to_terminal("Opening Twitter Login Page...", "#00BFFF")
@@ -537,13 +565,19 @@ def open_login_page(auto_mode=False):
         
         # Provide helpful error messages based on error type
         error_lower = error_msg.lower()
-        if 'binary' in error_lower:
+        if 'cannot connect' in error_lower or 'not reachable' in error_lower:
+            log_to_terminal("Error: Chrome started but connection failed.", "#FF4444")
+            log_to_terminal("This may be caused by:", "#FFAA00")
+            log_to_terminal("  1. Antivirus/firewall blocking the connection", "#FFAA00")
+            log_to_terminal("  2. Chrome version mismatch", "#FFAA00")
+            log_to_terminal("  3. Another Chrome instance interfering", "#FFAA00")
+            log_to_terminal("Try: Close all Chrome windows and run again.", "#FFAA00")
+        elif 'binary' in error_lower:
             log_to_terminal("Error: Chrome binary location issue.", "#FF4444")
             log_to_terminal("Try reinstalling Chrome from: https://www.google.com/chrome/", "#FFAA00")
         elif 'version' in error_lower or 'chromedriver' in error_lower:
             log_to_terminal("Error: ChromeDriver version mismatch.", "#FF4444")
-            log_to_terminal("The tool will try to download the correct driver automatically.", "#FFAA00")
-            log_to_terminal("If this persists, try updating Chrome to the latest version.", "#FFAA00")
+            log_to_terminal("Try updating Chrome to the latest version.", "#FFAA00")
         elif 'permission' in error_lower or 'access' in error_lower:
             log_to_terminal("Error: Permission denied.", "#FF4444")
             log_to_terminal("Try running the application as Administrator.", "#FFAA00")
