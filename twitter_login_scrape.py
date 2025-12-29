@@ -471,7 +471,17 @@ def open_login_page(auto_mode=False):
     
     try:
         log_to_terminal("Starting Undetected Chrome...", "#00BFFF")
-        _driver = uc.Chrome(use_subprocess=True)
+        
+        # Get Chrome path and configure options
+        chrome_path = find_chrome_path()
+        options = uc.ChromeOptions()
+        
+        if chrome_path:
+            log_to_terminal(f"Using Chrome at: {chrome_path}", "#888888")
+            options.binary_location = chrome_path
+        
+        # Create driver with explicit options
+        _driver = uc.Chrome(options=options, use_subprocess=True)
 
         log_to_terminal("Opening Twitter Login Page...", "#00BFFF")
         _driver.get("https://twitter.com/i/flow/login")
