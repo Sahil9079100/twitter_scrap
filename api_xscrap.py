@@ -62,10 +62,23 @@ def setup_driver(config=Config):
         print(f"Failed to initialize driver: {e}")
         raise e
 
+def get_config_path():
+    """
+    Returns the path to data.config.json.
+    On Windows: Uses %APPDATA%/TwitterScraper/data.config.json
+    On Linux/Mac: Uses current directory
+    """
+    import sys
+    if sys.platform == 'win32':
+        appdata = os.getenv('APPDATA')
+        if appdata:
+            return os.path.join(appdata, 'TwitterScraper', 'data.config.json')
+    return 'data.config.json'
+
 def load_credentials():
     """Loads login credentials from data.config.json"""
     try:
-        config_path = 'data.config.json'
+        config_path = get_config_path()
         if not os.path.exists(config_path):
             print(f"Error: {config_path} not found.")
             return None
