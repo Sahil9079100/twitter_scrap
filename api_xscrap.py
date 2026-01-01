@@ -10,11 +10,27 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
+def get_chrome_profile_dir():
+    """
+    Returns the path to the chrome_profile directory.
+    On Windows: Uses %APPDATA%/TwitterScraper/chrome_profile
+    On Linux/Mac: Uses current directory
+    """
+    import sys
+    if sys.platform == 'win32':
+        appdata = os.getenv('APPDATA')
+        if appdata:
+            profile_dir = os.path.join(appdata, 'TwitterScraper', 'chrome_profile')
+            # Ensure the directory exists
+            os.makedirs(profile_dir, exist_ok=True)
+            return profile_dir
+    return './chrome_profile'
+
 class Config:
     """Configuration for the Twitter Scraper"""
     # Browser Settings
     HEADLESS = False  # Set to True for production, False for debugging
-    USER_DATA_DIR = "./chrome_profile"  # To persist login session
+    USER_DATA_DIR = get_chrome_profile_dir()  # To persist login session
     
     # URLs
     LOGIN_URL = "https://x.com/i/flow/login"
