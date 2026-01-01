@@ -485,9 +485,9 @@ class App(ctk.CTk):
         def run_scraper():
             json_path = None
             try:
-                import twitter_login_scrape as scraper
-                # Reload config in module to pick up new file
-                scraper.load_config()
+                import api_xscrap as scraper
+                # Set the logger so scraper outputs go to GUI
+                scraper.set_logger(log_to_terminal)
                 json_path = scraper.run_automator()
             except Exception as e:
                 log_to_terminal(f"Scraper error: {e}", "#FF4444")
@@ -501,17 +501,33 @@ class App(ctk.CTk):
                     set_logger(log_to_terminal)
                     pdf_path = generate_pdf(json_path, pdf_output_dir)
                     log_to_terminal(f"[SUCCESS] PDF saved to: {pdf_path}", "#00FF04")
-                    
-                    # Delete JSON file after PDF generation
-                    try:
-                        os.unlink(json_path)
-                        log_to_terminal(f"Cleaned up JSON file: {json_path}", "#888888")
-                    except Exception as e:
-                        log_to_terminal(f"[WARN] Failed to delete JSON file: {e}", "#FFAA00")
                 except Exception as e:
                     log_to_terminal(f"PDF generation failed: {e}", "#FF4444")
             elif json_path is None:
                 log_to_terminal("Skipping PDF generation (scraping failed or no data).", "#FFAA00")
+            
+            # Cleanup: Delete all intermediate JSON files
+            try:
+                import glob
+                log_to_terminal("Cleaning up intermediate files...", "#888888")
+                cleanup_patterns = [
+                    "*_raw_api.json",      # Raw API responses
+                    "*_api_parsed.json",   # Parsed batch files
+                    "thread_*_full.json",  # Thread files
+                    "*_mega_scrape.json",  # Final mega parse file
+                ]
+                deleted_count = 0
+                for pattern in cleanup_patterns:
+                    for filepath in glob.glob(pattern):
+                        try:
+                            os.unlink(filepath)
+                            deleted_count += 1
+                        except Exception:
+                            pass
+                if deleted_count > 0:
+                    log_to_terminal(f"Cleaned up {deleted_count} intermediate file(s).", "#888888")
+            except Exception as e:
+                log_to_terminal(f"[WARN] Cleanup error: {e}", "#FFAA00")
             
             # Re-enable button
             self.after(0, lambda: self.next_btn.configure(
