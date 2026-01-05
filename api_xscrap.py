@@ -57,6 +57,11 @@ def setup_driver(config=Config):
     options.add_argument('--window-size=1920,1080')
     options.add_argument('--start-maximized')
     
+    # Prevent throttling when browser is in background
+    options.add_argument('--disable-background-timer-throttling')
+    options.add_argument('--disable-backgrounding-occluded-windows')
+    options.add_argument('--disable-renderer-backgrounding')
+    
     # Persist user profile
     abs_profile_path = os.path.abspath(config.USER_DATA_DIR)
     options.add_argument(f'--user-data-dir={abs_profile_path}')
@@ -471,11 +476,11 @@ def scrape_profile(driver, username, limit=50):
     Navigates to user profile, scrolls, and intercepts multiple UserTweets GraphQL responses.
     """
     profile_url = f"https://x.com/{username}"
-    print(f"Navigating to profile: {profile_url}")
+    log(f"Navigating to profile: {profile_url}", "#00BFFF")
     driver.get(profile_url)
     
     # Wait for initial load
-    print("Waiting for page load (5s)...")
+    log("Waiting for page to load...", "#888888")
     time.sleep(5)
     
     processed_urls = set() # The "security_log" to track fetched APIs
@@ -487,11 +492,9 @@ def scrape_profile(driver, username, limit=50):
     
     # Safety break for no-progress (since we removed max_scrolls)
     no_new_data_scrolls = 0
-    max_no_data_scrolls = 15
+    max_no_data_scrolls = 5000
     
     while total_tweets < limit:
-        print(f"Scanning network logs (Collected: {total_tweets}/{limit})...")
-        
         # Get current logs (this consumes them, so we only get new ones since last call)
         logs = driver.get_log("performance")
         found_new_batch = False
@@ -512,8 +515,6 @@ def scrape_profile(driver, username, limit=50):
                     if "UserTweets" in url and "variables" in url:
                         # Check security log
                         if url not in processed_urls:
-                            print(f"Found new UserTweets API: {url[:100]}...")
-                            
                             try:
                                 # Fetch the body using CDP
                                 body_data = driver.execute_cdp_cmd('Network.getResponseBody', {'requestId': request_id})
@@ -526,7 +527,6 @@ def scrape_profile(driver, username, limit=50):
                                 raw_filename = f"{batch_count + 1}_raw_api.json"
                                 with open(raw_filename, "w", encoding="utf-8") as f:
                                     json.dump(data, f, indent=4)
-                                print(f"Saved raw response to {raw_filename}")
                                 
                                 # Parse
                                 new_tweets, incomplete_ids = parse_response(data)
@@ -541,18 +541,25 @@ def scrape_profile(driver, username, limit=50):
                                         incomplete_ids = [tid for tid in incomplete_ids if tid in kept_ids]
                                     
                                     count = len(new_tweets)
-                                    print(f"Parsed {count} tweets from this batch.")
+                                    total_tweets += count
+                                    
+                                    # Show progress in GUI
+                                    # if limit is 100000000, show 'complete' instead of 100000000 in the log
+                                    if limit >= 100000000:
+                                        display_limit = "complete"
+                                    else:
+                                        display_limit = str(limit)
+                                    log(f"📥 Fetched {count} tweets  |  Total: {total_tweets}/{display_limit}", "#00FF04")
+                                    log(f"Scrolling and fetching more tweets...", "#00FF04")
                                     
                                     # Save Individual Batch Data (RAM Optimization)
                                     batch_filename = f"{batch_count + 1}_api_parsed.json"
                                     with open(batch_filename, "w", encoding="utf-8") as f:
                                         json.dump(new_tweets, f, indent=4, ensure_ascii=False)
-                                    print(f"Saved batch to {batch_filename}")
                                     
-                                    total_tweets += count
                                     found_new_batch = True
                                 else:
-                                    print(f"Warning: No tweets parsed from batch {batch_count + 1}")
+                                    pass  # No tweets in this batch, continue silently
                                 
                                 # Add incomplete threads to queue
                                 if incomplete_ids:
@@ -567,7 +574,7 @@ def scrape_profile(driver, username, limit=50):
                                     break
                                     
                             except Exception as e:
-                                print(f"Failed to get body for {request_id}: {e}")
+                                log(f"⚠️ Failed to fetch batch: {e}", "#FFAA00")
                         else:
                             # Already processed this URL
                             pass
@@ -575,25 +582,24 @@ def scrape_profile(driver, username, limit=50):
                 continue
         
         if total_tweets >= limit:
-            print(f"Tweet limit of {limit} reached.")
+            log(f"✅ Tweet limit of {limit} reached!", "#00FF04")
             break
             
         if not found_new_batch:
             no_new_data_scrolls += 1
             if no_new_data_scrolls >= max_no_data_scrolls:
-                print("No new data found after multiple scrolls. Stopping.")
+                log("⏹️ No new data found. Stopping.", "#FFAA00")
                 break
         else:
             no_new_data_scrolls = 0
             
         # Scroll to trigger more content
-        print("Scrolling...")
         scroll_page(driver)
         
     if total_tweets == 0:
-        print("No tweets collected.")
+        log("❌ No tweets collected.", "#FF4444")
     else:
-        print(f"Successfully captured {total_tweets} tweets in {batch_count} batches.")
+        log(f"✅ Successfully captured {total_tweets} tweets in {batch_count} batches.", "#00FF04")
         
     # Phase 4.5: Process Incomplete Threads
     if incomplete_threads_queue:
